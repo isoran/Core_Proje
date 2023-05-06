@@ -1,0 +1,19 @@
+﻿@model EntityLayer.Concrete.Announcement
+
+@{
+    ViewData["Title"] = "AnnouncementDetails";
+    Layout = "~/Views/Shared/_WriterLayout.cshtml";
+}
+
+
+@*<h4>@Html.LabelFor(x=>x.Title, new { @class="form-control"})</h4>*@
+
+<div class="card col-lg-6 mx--1">
+    <div class="card-body">
+        <h6 class="card-footer">@Html.TextBoxFor(x => x.Status, new { @class = "form-control" })</h6>
+        <h5 class="card-title">@Html.TextBoxFor(x => x.Title, new { @class = "form-control" })</h5>
+        <p class="card-text">@Html.TextAreaFor(x => x.Content, 3, 3, new { @class = "form-control" })</p>
+        <p class="card-text">@Html.TextBoxFor(x => x.Date, new { @class = "form-control" })</p>
+    </div>
+</div>
+

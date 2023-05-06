@@ -1,0 +1,110 @@
+﻿@using EntityLayer.Concrete
+@model List<Announcement>
+@{
+    ViewData["Title"] = "Index";
+    Layout = "~/Views/Shared/_WriterLayout.cshtml";
+}
+
+@{ string color = "";}
+
+<div class="col-lg-12 grid-margin stretch-card">
+    <div class="card">
+        <div class="card-body">
+            <h4 class="card-title">Duyurular</h4>
+            <p class="card-description">
+                Duyuru Tablosu
+            </p>
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            @*<th>#</th>*@
+                            <th>Başlık.</th>
+                            <th>Tarih</th>
+                            <th>Konu</th>
+                            <th>Durum</th>
+                            <th>Detay</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in Model)
+                        {
+                            // set color based on item.Status value
+                            if (item.Status == "Yeni Yazı")
+                            {
+                                color = "badge badge-danger";
+                            }
+                            else if (item.Status == "Yeni Proje")
+                            {
+                                color = "badge badge-warning";
+                            }
+                            else if (item.Status == "Sosyal Medya")
+                            {
+                                color = "badge badge-info";
+                            }
+                            else if (item.Status == "Teknik Servis")
+                            {
+                                color = "badge badge-success";
+                            }
+                            // generate unique id for each modal
+                            var modalId = $"Modal-{item.Id}";
+                            <tr>
+                                <td>@item.Title</td>
+                                <td>@(((DateTime)item.Date).ToString("dd.MM.yyyy"))</td>
+                                @if (item.Content.Length > 40)
+                                {
+                                    <td class="text-muted">@item.Content.Substring(0, 40)...</td>
+                                }
+                                else
+                                {
+                                    <td class="text-muted">@item.Content.Substring(0, item.Content.Length)...</td>
+                                }
+                                <td><label class="@color">@item.Status</label></td>
+                                <td>
+                                    <button type="button" class="btn btn-outline-dribbble btn-sm" data-toggle="modal" data-target="#@modalId">Detaylar</button>
+
+                                    <div class="modal fade" id="@modalId" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true">
+                                        <div class="modal-dialog" role="document">
+                                            <div class="modal-content">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title" id="exampleModalLabel">@item.Title</h5>
+                                                </div>
+                                                <div class="modal-body">
+                                                    <p><label class="@color">@item.Status</label></p>
+                                                    <p style="white-space:pre-wrap">@item.Content</p>
+                                                    <p>@(((DateTime)item.Date).ToString("dd.MM.yyyy"))</p>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-danger" data-dismiss="modal">Kapat</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                </td>
+                            </tr>
+                        }
+
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@*<div class="modal" id="Modal1">
+        <div class="modal-dialog modal-fullscreen-sm-down">
+            <div class="modal-content">
+
+                <div class="modal-header">
+                    <h2 class="modal-title">@Html.LabelFor(x=>x)</h2>
+                </div>
+                <div class="modal-body">
+                    <h2>içerik</h2>
+                    <br />
+                    <button type="button" class="btn btn-danger" data-dismiss="modal">Tamam</button>
+                </div>
+
+            </div>
+        </div>
+    </div>*@

@@ -1,0 +1,45 @@
+﻿@model EntityLayer.Concrete.Experience
+@{
+    ViewData["Title"] = "EditExperience";
+    Layout = "~/Views/Shared/_NewAdminLayout.cshtml";
+}
+
+
+@using (Html.BeginForm("AddExperience", "Experience", FormMethod.Post))
+{
+    <div class="col-12 grid-margin stretch-card">
+        <div class="card">
+            <div class="card-body">
+                <form class="forms-sample">
+                    <div class="form-group">
+                        @Html.HiddenFor(x => x.ExperienceID)
+                    </div>
+                    <div class="form-group">
+                        <label>Başlık</label>
+                        @Html.TextBoxFor(x => x.Name, new { @class = "form-control", style = "color:yellow" })
+                    </div>
+                    <div class="form-group">
+                        <label>Tarih</label>
+                        @Html.TextBoxFor(x => x.Date, new { @class = "form-control", style = "color:yellow"})
+                    </div>
+                    <div class="form-group">
+                        <label>Görsel URL</label>
+                        @Html.TextBoxFor(x => x.ImageUrl, new { @class = "form-control", style = "color:yellow" })
+                    </div>
+                    <div class="form-group">
+                        <label>Açıklama</label>
+                        @Html.TextAreaFor(x => x.Description, 5, 3, new { @class = "form-control", style = "color:yellow" })
+                    </div>
+                    <button type="submit" class="btn btn-outline-success mr-2">Kaydet</button>
+                    <button type="button" class="btn btn-outline-danger" onclick="goBack()">Vazgeç</button>
+                </form>
+            </div>
+        </div>
+    </div>
+}
+
+<script>
+    function goBack() {
+        window.history.back();
+    }
+</script>

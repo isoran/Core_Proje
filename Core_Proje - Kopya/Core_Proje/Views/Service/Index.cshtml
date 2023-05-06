@@ -1,0 +1,89 @@
+﻿@using EntityLayer.Concrete
+@model List<Service>
+@{
+    ViewData["Title"] = "Index";
+    Layout = "~/Views/Shared/_NewAdminLayout.cshtml";
+}
+
+
+<div class="col-lg-12 grid-margin stretch-card">
+    <div class="card">
+        <div class="card-body">
+            <h4 class="card-title">Hizmetler</h4>
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            @*<th style="text-align:center">#</th>*@
+                            <th>Başlık</th>
+                            <th>Görsel</th>
+                            <th style="text-align:center">Sil</th>
+                            <th style="text-align:center">Düzenle</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody class="list">
+                        @foreach (var item in Model)
+                        {
+                            <tr>
+                                @*<th style="text-align:center">
+                                        @item.SkillID
+                                    </th>*@
+                                <td class="budget">
+                                    @item.Title
+                                </td>
+                                <td class="budget">
+                                    @item.ImageUrl
+                                </td>
+                                <td style="text-align:center"><a class="btn btn-outline-danger" href="/Service/DeleteService/@item.ServiceID" onclick="return confirm('Silme İşlemini Onaylayın!');">Sil</a></td>
+                                <td style="text-align:center"><a href="/Service/EditService/@item.ServiceID" class="btn btn-outline-success">Güncelle</a></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+                <br />
+                <a href="/Service/AddService" class="btn btn-outline-warning">Yeni Hizmet Ekle</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+<!-- Light table -->
+@*<div class="table-responsive">
+    <table class="table align-items-center table-flush">
+        <thead class="thead-light">
+            <tr>
+                <th scope="col" class="sort" data-sort="name" style="text-align:center">#</th>
+                <th scope="col" class="sort" data-sort="budget">Başlık</th>
+                <th scope="col" class="sort" data-sort="status">Görsel</th>
+                <th scope="col" style="text-align:center">Sil</th>
+                <th scope="col" class="sort" data-sort="completion" style="text-align:center">Düzenle</th>
+                <th scope="col"></th>
+            </tr>
+        </thead>
+        <tbody class="list">
+            @foreach (var item in Model)
+            {
+                <tr>
+                    <th style="text-align:center">
+                        @item.ServiceID
+                    </th>
+                    <td class="budget">
+                        @item.Title
+                    </td>
+                    <td>
+                        @item.ImageUrl
+                    </td>
+                    <td style="text-align:center"><a class="btn btn-danger" href="/Service/DeleteService/@item.ServiceID" onclick="return confirm('Silme İşlemini Onaylayın!');">Sil</a></td>
+                    <td style="text-align:center"><a href="/Service/EditService/@item.ServiceID" class="btn btn-success">Güncelle</a></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    <br />
+    <a href="/Service/AddService" class="btn btn-google-plus">Yeni Hizmet Ekle</a>
+    <br />
+</div>*@
+

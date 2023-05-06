@@ -1,0 +1,35 @@
+﻿@model EntityLayer.Concrete.Service
+@{
+    ViewData["Title"] = "EditService";
+    Layout = "~/Views/Shared/_NewAdminLayout.cshtml";
+}
+
+<div class="card-header border-0">
+    <h3 class="mb-0">Hizmet Düzenleme Sayfası</h3>
+</div>
+
+@using (Html.BeginForm("EditService", "Service", FormMethod.Post))
+{
+<form class="form-group" method="post">
+
+    @Html.HiddenFor(x => x.ServiceID)
+    <br />
+    @Html.Label("Hizmet Başlığı")
+    @Html.TextBoxFor(x => x.Title, new { @class = "form-control", style = "color:yellow" })
+    @Html.ValidationMessageFor(x => x.Title, "", new { @class = "text-danger" })
+    <br />
+    @Html.Label("ImageURL")
+    @Html.TextBoxFor(x => x.ImageUrl, new { @class = "form-control", style = "color:yellow" })
+    @Html.ValidationMessageFor(x => x.ImageUrl, "", new { @class = "text-danger" })
+    <br />
+    <button class="btn btn-outline-success">Güncelle</button>
+    <button type="button" class="btn btn-outline-danger" onclick="goBack()">Vazgeç</button>
+
+</form>
+}
+
+<script>
+    function goBack() {
+        window.history.back();
+    }
+</script>

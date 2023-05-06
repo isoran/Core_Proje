@@ -1,0 +1,808 @@
+unit ModBus;
+
+procedure Modbus_Reset_Rx_Data;
+procedure Modbus_Reset_Tx_Data;
+procedure Start_Modbus_Init;
+procedure Modbus_Rx_CRC_Calculate;
+procedure Modbus_Tx_CRC_Calculate (CRC_Tx_length: byte);
+procedure Modbus_Send(send_count: byte);
+procedure Modbus_Reg_Data_Fill;
+procedure Modbus_Check_Packet;
+procedure Modbus_Function0x03;
+procedure Modbus_Decode_Frame;
+procedure Check_Modbus;
+procedure Pause_Ms(Value:word);external;
+
+
+(*
+ modbus protokolü
+Master bilgi okumak için oluþturduðu string:
+    *Slave cihaz adresi           1.byte Her cihazýn farklý bir adresi vardýr ve master’ýn adresi olmaz.
+    *Fonksiyon kodu               1.byte Bilgi okumak için 03. Sonraki bölümlerde daha fazla bilgi bulabilirsiniz.
+    *Registers baþlangýç adresi   2.byte (Registers adresi “30001” + ofset”-30001” = 0)
+    *Okunacak registers sayýsý    2.byte
+    *Crc 16                       2.byte Gönderilen tüm datalar belli bir formülden geçirilir ve sonucu string’e eklenir.
+Slave cihaz aldýðý stringi ayný formülden geçirir ve sonuç ayný olursa bilgiyi iþler aksi taktirde iþlemez.
+Böylece hatalý bilgi gönderilmesinin önüne geçilmiþ olur.teroik olarak %100 olmasada pratikte %100 etkilidir.
+
+
+fonksiyonlar
+03: Registerlarý oku
+06: Tek holding register oku
+
+
+
+Slave’in gönderdiði cevap:
+    *Slave cihaz adresi           1 byte
+    *Fonksiyon kodu               1 byte
+    *Gönderdiði byte sayýsý       1 byte
+    *Data                         2 byte ilk byte yüksek deðerli 2.byte düþük deðerli sonuç = (1.byte x 256) + 2.byte
+    *Crc 16
+
+*)
+
+Const
+  // Table of CRC values for high-order byte
+  AuchCRCHi : array[256] of byte =
+  (
+  0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81,
+  0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0,
+  0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01,
+  0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41,
+  0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81,
+  0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0,
+  0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01,
+  0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40,
+  0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81,
+  0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0,
+  0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01,
+  0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
+  0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81,
+  0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0,
+  0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01,
+  0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
+  0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81,
+  0x40
+  );
+
+// Table of CRC values for low-order byte
+  AuchCRCLo : array[256] of byte = (
+  0x00, 0xC0, 0xC1, 0x01, 0xC3, 0x03, 0x02, 0xC2, 0xC6, 0x06, 0x07, 0xC7, 0x05, 0xC5, 0xC4,
+  0x04, 0xCC, 0x0C, 0x0D, 0xCD, 0x0F, 0xCF, 0xCE, 0x0E, 0x0A, 0xCA, 0xCB, 0x0B, 0xC9, 0x09,
+  0x08, 0xC8, 0xD8, 0x18, 0x19, 0xD9, 0x1B, 0xDB, 0xDA, 0x1A, 0x1E, 0xDE, 0xDF, 0x1F, 0xDD,
+  0x1D, 0x1C, 0xDC, 0x14, 0xD4, 0xD5, 0x15, 0xD7, 0x17, 0x16, 0xD6, 0xD2, 0x12, 0x13, 0xD3,
+  0x11, 0xD1, 0xD0, 0x10, 0xF0, 0x30, 0x31, 0xF1, 0x33, 0xF3, 0xF2, 0x32, 0x36, 0xF6, 0xF7,
+  0x37, 0xF5, 0x35, 0x34, 0xF4, 0x3C, 0xFC, 0xFD, 0x3D, 0xFF, 0x3F, 0x3E, 0xFE, 0xFA, 0x3A,
+  0x3B, 0xFB, 0x39, 0xF9, 0xF8, 0x38, 0x28, 0xE8, 0xE9, 0x29, 0xEB, 0x2B, 0x2A, 0xEA, 0xEE,
+  0x2E, 0x2F, 0xEF, 0x2D, 0xED, 0xEC, 0x2C, 0xE4, 0x24, 0x25, 0xE5, 0x27, 0xE7, 0xE6, 0x26,
+  0x22, 0xE2, 0xE3, 0x23, 0xE1, 0x21, 0x20, 0xE0, 0xA0, 0x60, 0x61, 0xA1, 0x63, 0xA3, 0xA2,
+  0x62, 0x66, 0xA6, 0xA7, 0x67, 0xA5, 0x65, 0x64, 0xA4, 0x6C, 0xAC, 0xAD, 0x6D, 0xAF, 0x6F,
+  0x6E, 0xAE, 0xAA, 0x6A, 0x6B, 0xAB, 0x69, 0xA9, 0xA8, 0x68, 0x78, 0xB8, 0xB9, 0x79, 0xBB,
+  0x7B, 0x7A, 0xBA, 0xBE, 0x7E, 0x7F, 0xBF, 0x7D, 0xBD, 0xBC, 0x7C, 0xB4, 0x74, 0x75, 0xB5,
+  0x77, 0xB7, 0xB6, 0x76, 0x72, 0xB2, 0xB3, 0x73, 0xB1, 0x71, 0x70, 0xB0, 0x50, 0x90, 0x91,
+  0x51, 0x93, 0x53, 0x52, 0x92, 0x96, 0x56, 0x57, 0x97, 0x55, 0x95, 0x94, 0x54, 0x9C, 0x5C,
+  0x5D, 0x9D, 0x5F, 0x9F, 0x9E, 0x5E, 0x5A, 0x9A, 0x9B, 0x5B, 0x99, 0x59, 0x58, 0x98, 0x88,
+  0x48, 0x49, 0x89, 0x4B, 0x8B, 0x8A, 0x4A, 0x4E, 0x8E, 0x8F, 0x4F, 0x8D, 0x4D, 0x4C, 0x8C,
+  0x44, 0x84, 0x85, 0x45, 0x87, 0x47, 0x46, 0x86, 0x82, 0x42, 0x43, 0x83, 0x41, 0x81, 0x80,
+  0x40
+  );
+  
+  Const_T1_IF_IFS0 =3;
+  Const_T2_IF_IFS0 =6;
+  Const_T3_IF_IFS0 =7;
+  Const_UART1_RX_IF_IFS0 =9;
+
+  Const_T1_IE_IEC0=3;
+  Const_T2_IE_IEC0=6;
+  Const_T3_IE_IEC0=7;
+  Const_UART1_RX_IE_IEC0=9;
+
+  Const_PR1 = 30000; //60mhz=15000;
+  Const_PR4 = 37878; // 10ms timer
+
+  Const_ModBus_TimeOut_Timer3_PR3_9600   = 3185; // 1/10 karakter süresi için 10^6/9600=105uS,
+  Const_ModBus_TimeOut_Timer3_PR3_19200  = 1610; // 1/10 karakter süresi için 10^6/19200=53uS,
+  Const_ModBus_TimeOut_Timer3_PR3_38400  = 790; // 1/10 karakter süresi için 10^6/38400=26uS,
+  Const_ModBus_TimeOut_Timer3_PR3_57600  = 550; // 1/10 karakter süresi için 10^6/57600=18uS,
+
+  const_Modbus_sent_wait_counter_max = 200;
+
+  const_Modbus_Types_Invalid_mb_Type = 0;
+  const_Modbus_Types_Coils = 1;
+  const_Modbus_Types_Status_Inputs = 2;
+  const_Modbus_Types_Holding_Registers = 3;
+  const_Modbus_Types_Input_Registers = 4;
+
+  const_Modbus_Functions_Read_Coils = 1;
+  const_Modbus_Functions_Read_Status_Inputs = 2;
+  const_Modbus_Functions_Read_Holding_Registers = 3;
+  const_Modbus_Functions_Read_Input_Registers = 4;
+  const_Modbus_Functions_Read_Single_Holding_Register = 6;
+  const_Modbus_Functions_Write_Coils = 15;
+  const_Modbus_Functions_Write_Multiple_Registers = 16;
+
+  const_Modbus_MaxReg    = 125;      //' Number of registers (count from 0) 120
+  const_Modbus_TxBufSize = 128;  //' Max buffer size should include all registers + CRC + overhead
+  const_Modbus_RxBufSize = 16;   //' RX Buffer size does not really matter as we are only interested in first 7 chars constituting a MB command
+
+  Const_Modbus_BaudRate_9600   = 9600;  //0: 9600 1: 19200 2: 38400  3: 57600
+  Const_Modbus_BaudRate_19200  = 19200;
+  Const_Modbus_BaudRate_38400  = 38400;
+  Const_Modbus_BaudRate_57600  = 57600;
+  
+  Modbus_DataLength = 70; // 70 adet data gönderilecek
+  
+var
+   Modbus_RxTx_Pin : sbit at RG13_bit;
+   Modbus_RxTx_Pin_Direction : sbit at TRISG13_bit;
+   Ok_Button           : sbit at RD0_bit;
+   
+   ModBus_TimeOut_Timer3_PR3 : word;
+   ModBus_TimeOut : byte;
+   temp_byte_1    : byte;
+
+   Modbus_Rx_data  : array [1..const_modbus_RxBufSize] of byte;  //16
+   Modbus_Tx_data  : array [1..const_modbus_TxBufSize] of byte;  //128
+   Modbus_Reg_data : array [1..const_modbus_MaxReg] of word;
+
+   Modbus_Rx_CRC_hi  : byte;
+   Modbus_Rx_CRC_lo  : byte;
+   Modbus_Tx_CRC_hi  : byte;
+   Modbus_Tx_CRC_lo  : byte;
+   Temp_Word         : word;
+
+   Modbus_Rx_Data_MSB_Adress : byte;
+   Modbus_Rx_Data_LSB_Adress : byte;
+   Modbus_Rx_Data_Count_MSB  : byte;
+   Modbus_Rx_Data_Count_LSB  : byte;
+   Modbus_Function_Good      : byte;
+   Modbus_State              : byte;
+   Modbus_Tx_Index           : byte;
+   Modbus_Function           : byte;
+   CRC_Rx_uchCRCHi           : byte;
+   CRC_Rx_uchCRCLo           : byte;
+   CRC_Rx_uIndex             : byte;
+   CRC_Rx_Tmp_word           : word;
+   CRC_Rx_i                  : byte;
+   CRC_Tx_uchCRCHi           : byte;
+   CRC_Tx_uchCRCLo           : byte;
+   CRC_Tx_uIndex             : byte;
+   CRC_Tx_tmp_word           : word;
+   CRC_Tx_i                  : byte;
+   Modbus_Reset_DERE         : byte;
+   Receive_Enable            : byte;
+   Modbus_Rx_data_index      : byte;
+   Modbus_Adress             : byte;
+   mb_temp_byte_1            : byte;
+   mb_temp_byte_2            : byte;
+   mb_temp_byte_3            : byte;
+   ModBus_Baud               : Word;
+   Modbus_Data               : word;
+   Modbus_Packet_Good        : byte;
+   Modbus_Rec_Counter        : word;
+   DSW_Start_Value_4_10      : word;
+   temp_word_1               : word;
+   Comm_FaultModbus          : byte;
+   Comm_Tmr                  : byte;
+
+
+   Rly_AcHighBit, Rly_AcLowBit, Rly_DcHighBit, Rly_DcLowBit, Rly_PosLeakageBit,
+   Rly_NegLeakageBit, Rly_BattAmpsLimitBit, Rly_RedAmpsLimitBit, Rly_FanFaultBit,
+   Rly_HighTempBit, Rly_BattReverseBit, Rly_AcMcbBit, Rly_DcMcbBit, Rly_BattMcbBit,
+   Rly_RedGenFaultBit, Rly_DeepDschBit : bit; external;
+
+
+   
+   Read_OutAmps, Read_LoadVolt ,Read_BattAmps, Read_RedVolt, Read_Temp, Read_U1Volt, Read_U2Volt,
+   Read_U3Volt, Read_U1Amps, Read_U2Amps, Read_U3Amps, Read_Freq : word; external;
+   
+   BoostChargeVoltage, FloatChargeVoltage, BoostChargeTimeSet, DeepDischargeVolt : word; external;
+   BoostChargeTime : LongInt; external;
+   AutoBFMode : bit; external;
+   BoostChargeLimit, FloatChargeLimit : word; external;
+   ChargeMode : byte; external;
+   
+   ACMaxVoltSet, ACMinVoltSet : word; external;
+   DCOutVoltSet, DcOutAmpsSet : word; external;
+   MaxvoltSet, MinVoltSet : word; external;
+  { DCSetResponseTime, ACSetResponseTime : byte; external; }
+   Dropper_OutStatus : byte; external;
+   
+   BatteryAh, BatteryAmpsSet : word; external;
+   
+   {TempSetResponseTime, }TempFanOffSet, TempFanOnSet, TempAlarmSet,PCB_Temperature : byte; external;
+   LanguageBit : byte; external;
+   
+   Leakage_Pos_Set, Leakage_Neg_Set : short; external;
+   
+   HucreSayisi, NomHucreGerilim, RedresorAkim : word; external;
+   LeakageValue : byte; external;
+   
+   Send_Test_Text : string[10];external;
+   
+   
+   
+   
+   
+   
+   
+   
+implementation
+//******************************************************************************
+procedure Modbus_Reset_Rx_Data;
+  begin
+
+      asm ClrWDT; end;
+
+
+      for Temp_Byte_1 := 1 to const_Modbus_RxBufSize do
+        Modbus_Rx_Data[Temp_Byte_1] := 0;
+
+      Modbus_Rx_data_Index := 0; // init Modbus_Rx_data_index back to first position in array
+
+  end;
+//******************************************************************************
+procedure Modbus_Reset_Tx_Data;
+  begin
+
+      asm ClrWDT; end;
+
+      for Temp_Byte_1:= 1 to const_Modbus_TxBufSize do
+        Modbus_Tx_data[temp_byte_1] := 0;
+
+  end;
+//******************************************************************************
+procedure Start_Modbus_Init;
+  begin
+
+      asm ClrWDT; end;
+      
+      Modbus_Reset_Rx_Data;
+      
+      asm ClrWDT; end;
+      
+      Modbus_Reset_Tx_Data;
+      
+      asm ClrWDT; end;
+
+
+  end;
+//******************************************************************************
+procedure Modbus_Rx_CRC_Calculate;  // check the crc of the rx buffer. lo=[BufPtr-1] and hi=[BufPtr]
+  begin
+
+      asm ClrWDT; end;
+
+      CRC_Rx_uchCRCHi := 0xFF;
+      CRC_Rx_uchCRCLo := 0xFF;
+
+      for CRC_Rx_i := 1 to 6 do //Modbus_Rx_data_index-2 do               // dont incl checksum bits in check (obviously!)
+        begin
+            CRC_Rx_uIndex   := CRC_Rx_uchCRCLo XOR word(Modbus_Rx_data[CRC_Rx_i]);
+            CRC_Rx_uchCRCLo := CRC_Rx_uchCRCHi XOR auchCRCHi[CRC_Rx_uIndex];
+            CRC_Rx_uchCRCHi := auchCRCLo[CRC_Rx_uIndex];
+        end;
+
+      Modbus_Rx_CRC_hi := CRC_Rx_uchCRCHi;
+      Modbus_Rx_CRC_lo := CRC_Rx_uchCRCLo;
+      
+      asm ClrWDT; end;
+
+  end;
+//--------------------------------------------------------------------------------
+procedure Modbus_Tx_CRC_Calculate (CRC_Tx_length: byte);  // check the crc of the rx buffer. lo=[BufPtr-1] and hi=[BufPtr]
+  begin
+
+      asm ClrWDT; end;
+      
+      CRC_Tx_uchCRCHi := 0xFF;
+      CRC_Tx_uchCRCLo := 0xFF;
+
+      for CRC_Tx_i := 1 to CRC_Tx_length do //Modbus_Rx_data_index-2 do               // dont incl checksum bits in check (obviously!)
+        begin
+            CRC_Tx_uIndex   := CRC_Tx_uchCRCLo XOR word(Modbus_Tx_data[CRC_Tx_i]);
+            CRC_Tx_uchCRCLo := CRC_Tx_uchCRCHi XOR auchCRCHi[CRC_Tx_uIndex];
+            CRC_Tx_uchCRCHi := auchCRCLo[CRC_Tx_uIndex];
+        end;
+
+      Modbus_Tx_CRC_hi := CRC_Tx_uchCRCHi;
+      Modbus_Tx_CRC_lo := CRC_Tx_uchCRCLo;
+      
+      asm ClrWDT; end;
+
+  end;
+//------------------------------------------------------------------------------
+procedure Modbus_Send(send_count: byte);   // Send out len chars in the TxBuf and then send a CRC
+  begin
+
+      asm ClrWDT; end;
+
+      if Modbus_Adress <> 0 then
+          begin
+                Modbus_RxTx_Pin := 1;
+                Delay_1uS;
+
+                for mb_temp_byte_1:=1 to send_count do
+                  Uart1_Write(Modbus_Tx_data[mb_temp_byte_1]);
+
+                  
+                if ModBus_Baud=9600 then
+                  begin
+                    Delay_us(1250);
+                  end
+                else if ModBus_Baud=19200 then
+                  begin
+                    Delay_us(625);
+                  end
+                else if ModBus_Baud=38400 then
+                  begin
+                    Delay_us(260);
+                  end
+                else if ModBus_Baud=57600 then
+                  begin
+                    Delay_us(209);
+                  end;
+
+                Modbus_RxTx_Pin := 0;
+
+
+                ModBus_TimeOut := 0;
+          end;
+          
+      asm ClrWDT; end;
+          
+  end;
+//******************************************************************************
+procedure Modbus_Reg_Data_Fill;
+  begin
+
+     //asm ClrWDT; end;
+
+
+      Modbus_Reg_Data[3] := hi(Read_RedVolt);          // 40 003
+      Modbus_Reg_Data[4] := lo(Read_RedVolt);          // Redresör Gerilimi
+
+      Modbus_Reg_Data[5] := hi(Read_LoadVolt);         // 40 004
+      Modbus_Reg_Data[6] := lo(Read_LoadVolt);         // yük gerilimi
+
+      Modbus_Reg_Data[7] := hi(Read_BattAmps);         // 40 005  ///
+      Modbus_Reg_Data[8] := lo(Read_BattAmps);         // akü akýmý
+
+      Modbus_Reg_Data[9]  := hi(Read_OutAmps);         // 40 006
+      Modbus_Reg_Data[10] := lo(Read_OutAmps);         // çýkýþ akýmý
+
+      Modbus_Reg_Data[11] := hi((Read_BattAmps+Read_OutAmps));            // 40 007
+      Modbus_Reg_Data[12]:= lo((Read_BattAmps+Read_OutAmps));             // toplam akým
+      
+      Modbus_Reg_Data[13] := hi(Read_U1Volt);          // 40 008
+      Modbus_Reg_Data[14] := lo(Read_U1Volt);          // u1 gerilim
+
+      Modbus_Reg_Data[15]:= hi(Read_U2Volt);           // 40 009
+      Modbus_Reg_Data[16]:= lo(Read_U2Volt);           // u2 gerilim
+
+      Modbus_Reg_Data[17] := hi(Read_U3Volt);          // 40 010
+      Modbus_Reg_Data[18] := Lo(Read_U3Volt);          // u3 gerilim
+
+      Modbus_Reg_Data[19] := hi(Read_U1Amps);          //40 011
+      Modbus_Reg_Data[20] := lo(Read_U1Amps);          // u1 akým
+
+      Modbus_Reg_Data[21] := hi(Read_U2Amps);          // u2 akým
+      Modbus_Reg_Data[22] := lo(Read_U2Amps);          // 40 012
+
+      Modbus_Reg_Data[23] := hi(Read_U3Amps);          // u3 amps
+      Modbus_Reg_Data[24] := lo(Read_U3Amps);          // 40 013
+
+      Modbus_Reg_Data[25] := hi(Read_Freq);            // frekans
+      Modbus_Reg_Data[26] := lo(Read_Freq);            // 40 014
+
+      Modbus_Reg_Data[27] := 0;                        // þarj modu
+      Modbus_Reg_Data[28] := ChargeMode;               // 40 015
+
+      Modbus_Reg_Data[29] := hi(BoostChargeTimeSet);   // ayarlanan hýzlý þarj süresi
+      Modbus_Reg_Data[30] := lo(BoostChargeTimeSet);   // 40 016
+
+      Modbus_Reg_Data[31] := hi(BoostChargeTime);      // kalan hýzlý þarj süresi
+      Modbus_Reg_Data[32] := lo(BoostChargeTime);      // 40 017
+
+      Modbus_Reg_Data[33] := 0;                        // otomatik hýzlý þarj/normal þarj
+      Modbus_Reg_Data[34] := AutoBFMode;               // 40 018
+
+      Modbus_Reg_Data[35] := hi(ACMaxVoltSet);         // AC max volt set deðeri
+      Modbus_Reg_Data[36] := lo(ACMaxVoltSet);         // 40 019
+
+      Modbus_Reg_Data[37] := hi(ACMinVoltSet);         // AC min volt set deðeri
+      Modbus_Reg_Data[38] := lo(ACMinVoltSet);         // 40 020
+
+      Modbus_Reg_Data[39] := 0;                        // ac tepki süresi
+      Modbus_Reg_Data[40] := 0;//ACSetResponseTime;        // 40 021
+
+      Modbus_Reg_Data[41] := hi(DCOutVoltSet);         // dc çýkýþ gerilimi set deðeri
+      Modbus_Reg_Data[42] := lo(DCOutVoltSet);         // 40 022
+
+      Modbus_Reg_Data[43] := hi(DCOutAmpsSet);         // dc çýkýþ akýmý set deðeri
+      Modbus_Reg_Data[44] := lo(DCOutAmpsSet);         // 40 023
+
+      Modbus_Reg_Data[45] := hi(MaxvoltSet);           // max dc gerilim set deðeri
+      Modbus_Reg_Data[46] := lo(MaxvoltSet);           // 40 024
+
+      Modbus_Reg_Data[47] := hi(MinVoltSet);           // min dc gerilim set deðeri
+      Modbus_Reg_Data[48] := lo(MinVoltSet);           // 40 025
+
+      Modbus_Reg_Data[49] := 0;                        // 40 026
+      Modbus_Reg_Data[50] := 0;//DCSetResponseTime;        // dc röle tepki süresi
+
+      Modbus_Reg_Data[51] := 0;                        // 40 027
+      Modbus_Reg_Data[52] := Dropper_OutStatus;        // dropper durumu
+
+      Modbus_Reg_Data[53] := hi(BatteryAh);            // 40 028
+      Modbus_Reg_Data[54] := lo(BatteryAh);            // akü ah set deðeri
+
+      Modbus_Reg_Data[55] := hi(BatteryAmpsSet) ;      // 40 029
+      Modbus_Reg_Data[56] := lo(BatteryAmpsSet);       // akü akým set deðeri
+
+      Modbus_Reg_Data[57] := hi(BoostChargeVoltage);   // 40 030
+      Modbus_Reg_Data[58] := lo(BoostChargeVoltage);   // hýzlý þarj gerilim set deðeri
+
+      Modbus_Reg_Data[59] := hi(FloatChargeVoltage);   // 40 031
+      Modbus_Reg_Data[60] := lo(FloatChargeVoltage);   // float þarj gerilim set deðeri
+
+      Modbus_Reg_Data[61] := hi(DeepDischargeVolt);    // 40 032
+      Modbus_Reg_Data[62] := lo(DeepDischargeVolt);    // derin deþarj geirlim set deðeri
+
+      Modbus_Reg_Data[63] := hi(BoostChargeLimit);     // 40 033
+      Modbus_Reg_Data[64] := lo(BoostChargeLimit);     // hýzlý þarj limit set deðeri
+      
+      Modbus_Reg_Data[65] := hi(FloatChargeLimit);     // 40 034
+      Modbus_Reg_Data[66] := lo(FloatChargeLimit);     // float þarj limit set deðeri
+
+      Modbus_Reg_Data[67] := 0;                        // 40 035
+      Modbus_Reg_Data[68] := TempAlarmSet;             // sýcaklýk alarm set deðeri
+
+      Modbus_Reg_Data[69] := 0;                        // 40 036
+      Modbus_Reg_Data[70] := TempFanOnSet;             // fan açma sýcaklýk set deðeri
+
+      Modbus_Reg_Data[71] := 0;                        // 40 037
+      Modbus_Reg_Data[72] := TempFanOffSet;            // fan kapatma sýcaklýk of deðeri
+
+      Modbus_Reg_Data[73] := 0;                        // 40 038
+      Modbus_Reg_Data[74] := PCB_Temperature;          //kasa iç sýcaklýk bilgisi
+
+      Modbus_Reg_Data[75] := 0;                        // 40 039
+      Modbus_Reg_Data[76] := LanguageBit;              // dil set deðeri
+
+      Modbus_Reg_Data[77] := 0;                        // 40 040
+      Modbus_Reg_Data[78] := Leakage_Pos_Set;          // + kaçak direnç set deðeri
+
+      Modbus_Reg_Data[79] := 0;                        // 40 041
+      Modbus_Reg_Data[80] := Leakage_Neg_Set;          // - kaçak direnç set deðeri
+
+      Modbus_Reg_Data[81] := 0;                        // 40 042
+      Modbus_Reg_Data[82] := Rly_AcHighBit;            // ac yüksek rölesi durumu
+
+      Modbus_Reg_Data[83] := 0;                        // 40 043
+      Modbus_Reg_Data[84] := Rly_AcLowBit;             // ac düþük rölesi durumu
+
+      Modbus_Reg_Data[85] := 0;                        // 40 044
+      Modbus_Reg_Data[86] := Rly_DcHighBit;            // dc yüksek rölesi durumu
+
+      Modbus_Reg_Data[87] := 0;                        // 40 045
+      Modbus_Reg_Data[88] := Rly_DcLowBit;             // dc düþük rölesi durumu
+
+      Modbus_Reg_Data[89] := 0;                        // 40 046
+      Modbus_Reg_Data[90] := Rly_PosLeakageBit;        // + kaçak durumu
+
+      Modbus_Reg_Data[91] := 0;                        // 40 047
+      Modbus_Reg_Data[92] := Rly_NegLeakageBit;        // - kaçak durumu
+
+      Modbus_Reg_Data[93] := 0;                        // 40 048
+      Modbus_Reg_Data[94] := LeakageValue;             // kaçak akým deðeri
+
+      Modbus_Reg_Data[95] := 0;                        // 40 049
+      Modbus_Reg_Data[96] := Rly_BattAmpsLimitBit;     // akü akým sýnýrlama deðeri
+
+      Modbus_Reg_Data[97] := 0;                        // 40 050
+      Modbus_Reg_Data[98] := Rly_RedAmpsLimitBit;      // redresör akým sýnýrlama deðeri
+
+      Modbus_Reg_Data[99] := 0;                        // 40 051
+      Modbus_Reg_Data[100]:= Rly_FanFaultBit;          // fan hata deðeri
+
+      Modbus_Reg_Data[101] := 0;                       // 40 052
+      Modbus_Reg_Data[102] := Rly_HighTempBit;         // aþýrý sýcaklýk deðeri
+
+      Modbus_Reg_Data[103] := 0;                        // 40 053
+      Modbus_Reg_Data[104] := Rly_BattReverseBit;       // akü ters deðeri
+
+
+      Modbus_Reg_Data[105] := 0;                        // 40 054
+      Modbus_Reg_Data[106] := Rly_AcMcbBit;             // ac mcb deðeri
+
+
+      Modbus_Reg_Data[107] := 0;                        // 40 055
+      Modbus_Reg_Data[108] := Rly_DcMcbBit;             // dc mcb deðeri
+
+
+      Modbus_Reg_Data[109] := 0;                        // 40 056
+      Modbus_Reg_Data[110] := Rly_BattMcbBit;           // akü mcb deðeri
+
+
+      Modbus_Reg_Data[111] := 0;                        // 40 057
+      Modbus_Reg_Data[112] := Rly_DeepDschBit;          // derin deþarj deðeri
+
+
+      Modbus_Reg_Data[113] := hi(HucreSayisi);          // 40 058
+      Modbus_Reg_Data[114] := lo(HucreSayisi);          // hucre sayýsý
+
+      Modbus_Reg_Data[115] := hi(NomHucreGerilim);      // 40 059
+      Modbus_Reg_Data[116] := lo(NomHucreGerilim);      // hücre gerilim
+
+      Modbus_Reg_Data[117] := hi(RedresorAkim);         // 40 060
+      Modbus_Reg_Data[118] := lo(RedresorAkim);         // redresör akým
+
+
+
+
+
+    //Modbus_Reg_Data[73] := lo(Modbus_Rec_Counter);
+    //Modbus_Reg_Data[74] := hi(Modbus_Rec_Counter);
+
+    (*
+    for temp_byte_1:= 1 to 76 do
+     Modbus_Reg_Data[temp_byte_1] := temp_byte_1;
+     *)
+
+  end;
+procedure Modbus_Check_Packet;
+  begin
+
+      asm ClrWDT; end;
+      
+      Modbus_Packet_Good := 0;
+
+      Modbus_Rx_Data_MSB_Adress := Modbus_Rx_data[3];
+      Modbus_Rx_Data_LSB_Adress := Modbus_Rx_data[4];
+
+      Modbus_Rx_Data_Count_MSB := Modbus_Rx_data[5];
+      Modbus_Rx_Data_Count_LSB := Modbus_Rx_data[6];
+
+    //  if (Modbus_Rx_Data_MSB_Adress=0) AND (Modbus_Rx_Data_LSB_Adress < 34 )
+      if (Modbus_Rx_Data_LSB_Adress < Modbus_DataLength)         //41
+        AND (Modbus_Rx_Data_LSB_Adress > 0 ) //AND (Modbus_Rx_Data_Count_MSB = 0 )
+        AND (Modbus_Rx_Data_Count_LSB > 0 )
+        AND (Modbus_Rx_Data_Count_LSB < Modbus_DataLength ) then  //Starting address valid range is 0 to MaxReg
+        begin
+          Modbus_Packet_Good := 255;
+
+        end
+        else
+        begin
+          Modbus_Packet_Good := 0;
+
+        end;
+        
+        asm ClrWDT; end;
+
+  end;
+//------------------------------------------------------------------------------
+procedure Modbus_Function0x03;  //Function 0x04 read multiple registers
+var
+  i :byte;
+  begin
+
+      asm ClrWDT; end;
+
+         //Modbus_Reset_Tx_Data;
+      Modbus_Tx_data[1] := Modbus_Adress;
+      Modbus_Tx_data[2] := Modbus_Function;
+      Modbus_Tx_data[3] := Modbus_Rx_Data_Count_LSB*2;
+
+      Modbus_Rec_Counter := Modbus_Rec_Counter +1;
+
+      Modbus_Reg_Data[1] := hi(Modbus_Rec_Counter);//Modbus_Reg_Data[1];
+      Modbus_Reg_Data[2] := lo(Modbus_Rec_Counter);//Modbus_Reg_Data[2];
+
+      Modbus_Reg_Data[119]  := hi(Modbus_Rec_Counter);//Modbus_Reg_Data[73]; 79  40 061
+      Modbus_Reg_Data[120]  := lo(Modbus_Rec_Counter);//Modbus_Reg_Data[74]; 80
+
+         //Modbus_Tx_data[4] := 1;
+
+      mb_temp_byte_1 := Modbus_Rx_Data_LSB_Adress*2-1;
+      mb_temp_byte_2 := mb_temp_byte_1 + Modbus_Rx_Data_Count_LSB*2-1;
+
+      if mb_temp_byte_2 > const_modbus_MaxReg then
+        begin
+          mb_temp_byte_2 := const_modbus_MaxReg;
+          Modbus_Tx_data[3] := mb_temp_byte_2 div 2;
+        end;
+
+      mb_temp_byte_3 := 3;
+      
+      asm ClrWDT; end;
+
+      for i:= mb_temp_byte_1 to mb_temp_byte_2 do
+        begin
+          mb_temp_byte_3 := mb_temp_byte_3 + 1;
+          Modbus_Tx_data[mb_temp_byte_3] := Modbus_Reg_Data[i];
+        end;
+
+      Modbus_Tx_Index := mb_temp_byte_3;
+      Modbus_Function_Good := 255;
+      
+      asm ClrWDT; end;
+  end;
+//------------------------------------------------------------------------------
+
+procedure Modbus_Decode_Frame;  // decode the mb command in rxbuf
+  begin
+
+      asm ClrWDT; end;
+
+      if (Modbus_Rx_data[1] = Modbus_Adress) then
+        begin
+          Modbus_Rx_CRC_Calculate;
+
+          if (Modbus_Rx_data[7]= Modbus_Rx_CRC_lo) AND (Modbus_Rx_data[8]= Modbus_Rx_CRC_hi) then
+                  //RX CRC OK
+          begin
+            Modbus_Function := Modbus_Rx_data[2];
+            Modbus_Function_Good := 0;
+
+            Modbus_Check_Packet;
+
+            if Modbus_Packet_Good = 255 then
+            begin
+              case Modbus_Function of
+                0x03: //
+                begin
+                  Modbus_Function0x03();
+                end
+          //                     0x06: begin
+          //                              Modbus_Function0x06;
+          //                              Modbus_Function_Good := 255;
+          //                           end
+                      //        { Other modbus commands just add here if required }
+                else
+                Modbus_Function_Good := 0;
+              end;
+            end;
+          end
+          else // MB bad crc
+          begin
+            Modbus_Function_Good := 0;
+            Modbus_Reset_Rx_Data;                             // reset rxbuffer for next message
+          end;
+        end;
+        
+        asm ClrWDT; end;
+        
+  end;
+//------------------------------------------------------------------------------
+procedure Check_Modbus;
+  begin
+
+      asm ClrWDT; end;
+
+
+
+
+      {case Modbus_State of
+        0: //
+        begin
+
+          if (UART1_Data_Ready()=1) then
+           begin
+             mb_temp_byte_1 := Uart1_Read();
+             asm ClrWDT; end;
+           end;
+
+                 //timer2 int start
+          TMR3 := 0; //clear timer2 counter
+          PR3  := ModBus_TimeOut_Timer3_PR3;
+          IEC0 := IEC0 OR %0000000010000000; // enable  TMR3IF
+
+          ModBus_TimeOut := 0;    //' clear down frame timeout TIMER0 on char reception (>3.5 chars without a char is a frame timeout)
+
+          T3CON := %1000000000000000; //start TMR2
+          IFS0.9 := 0;                         //ensure interrupt not pending
+
+          Modbus_Rx_data_index := 0;
+                 //uart int start
+                //* IFS1.8 := 0;                           //ensure interrupt not pending
+                //* IEC0.9 := 1;                           //enable intterupt
+
+          Modbus_State := 1;
+          Receive_Enable := 255;
+
+        end;
+
+        1: //
+        begin //free 3.5 char
+          if (ModBus_TimeOut>60) then
+            begin
+              if (Modbus_Rx_data_index=0) then
+                begin
+                  ModBus_TimeOut := 0;
+                  Modbus_State := 2;
+                end
+                else
+                begin
+                         //Modbus_Rx_data_index := 0;
+                  ModBus_TimeOut := 0;
+                  Modbus_State := 2;
+                end;
+            end
+        end;
+
+        2: //
+        begin
+          if (Modbus_Rx_data_index >= 8)then
+          begin
+            Modbus_Rx_data_index := 0;
+
+            if Modbus_Rx_data[1] = Modbus_Adress then
+              begin
+
+                IEC0.7 :=0;
+                T3CON := %0000000000000000; //stop TMR3
+
+                Receive_Enable := 0;
+                       //* IEC0.const_UART1_RX_IE_IEC0 := 0;  //stop UART int
+
+                Modbus_Decode_Frame();
+
+                if (Modbus_Function_Good = 255) and (Modbus_Packet_Good=255) then
+                  begin
+
+                    Comm_FaultModbus := 0;
+
+                    Modbus_Tx_CRC_Calculate(Modbus_Tx_Index);
+
+                    Modbus_Tx_Index := Modbus_Tx_Index+1;
+                    Modbus_Tx_data[Modbus_Tx_Index] := Modbus_Tx_CRC_lo;
+
+                    Modbus_Tx_Index := Modbus_Tx_Index+1;
+                    Modbus_Tx_data[Modbus_Tx_Index] := Modbus_Tx_CRC_hi;
+
+                    Modbus_Send(Modbus_Tx_Index);
+
+                    Modbus_State := 0;
+
+                  end
+                else
+                begin
+                            //Modbus_Reset_Rx_Data;
+                            //Modbus_Reset_Tx_Data;
+                  Modbus_State := 0;
+
+                end;
+
+              end
+              else
+              begin
+                Modbus_State := 0;
+
+              end;
+          end
+          else
+            if (ModBus_TimeOut > 10) then
+            begin
+              IEC0.7 :=0;
+              T3CON := %0000000000000000; //stop TMR3
+              Receive_Enable := 0;
+                      //IEC0.const_UART1_RX_IE_IEC0 := 0;  //stop UART int
+              Modbus_State       := 0;
+
+              //Comm_FaultModbus   := 255;
+
+            end;
+        end
+
+        else //case
+        begin
+          Modbus_State := 0;
+        end;
+      end;}
+      
+      asm ClrWDT; end;
+
+  end;
+end.

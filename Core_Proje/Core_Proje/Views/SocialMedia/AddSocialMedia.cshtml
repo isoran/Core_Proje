@@ -1,0 +1,40 @@
+﻿@model EntityLayer.Concrete.SocialMedia
+
+@{
+    ViewData["Title"] = "AddSocialMedia";
+    Layout = "~/Views/Shared/_NewAdminLayout.cshtml";
+}
+
+@using (Html.BeginForm("AddSocialMedia", "SocialMedia", FormMethod.Post))
+{
+    <div class="col-12 grid-margin stretch-card">
+        <div class="card">
+            <div class="card-body">
+                <h4 class="card-title">Yeni Sosyal Medya Hesabı Ekle</h4>
+                <form class="forms-sample">
+                    <div class="form-group">
+                        <label>İsim</label>
+                        <input type="text" class="form-control" name="Name" placeholder="Name" style="color:white">
+                    </div>
+                    <div class="form-group">
+                        <label>Url</label>
+                        <input type="text" class="form-control" name="Url" placeholder="Url" style="color:white">
+                    </div>
+                    <div class="form-group">
+                        <label>Icon</label>
+                        <input type="text" class="form-control" name="Icon" placeholder="Icon Url" style="color:white">
+                    </div>
+                    <button type="submit" class="btn btn-outline-success mr-2">Kaydet</button>
+                    <button type="button" class="btn btn-outline-danger" onclick="goBack()">İptal</button>
+                </form>
+            </div>
+        </div>
+    </div>
+}
+
+<script>
+    function goBack() {
+        window.history.back();
+    }
+</script>
+

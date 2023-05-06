@@ -1,0 +1,6 @@
+1- Control Card-B (Ýþlemci Kartý) kartýnda LM35 sýcaklýk sensörü dizilmeyecek þeklinde iþaretlendi.
+   Bu malzeme Gemta Üretim birimi tarafýndan kullanýlacaktýr. Dolayýsýyla sipariþ edilecektir.
+
+2- Relay Card ledleri resimdeki gibi yüksek dizilecektir. Örnek için numune alýnabilir.
+
+3- Power Card üzerindeki IRFP064N ve DSEI60-06A malzemeleri GEMTA Üretim tarafýndan dizilecektir. Dolayýsýyla sipariþ edilecektir.

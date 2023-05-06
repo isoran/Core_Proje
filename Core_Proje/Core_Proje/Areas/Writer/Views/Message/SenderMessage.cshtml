@@ -1,0 +1,75 @@
+﻿@using EntityLayer.Concrete
+@model List<WriterMessage>
+
+@{
+    ViewData["Title"] = "ReceiverMessage";
+    Layout = "~/Views/Shared/_WriterLayout.cshtml";
+}
+
+
+<div class="col-lg-12 grid-margin stretch-card">
+    <div class="card">
+        <div class="card-body">
+            <h4 class="card-title">Giden Kutusu</h4>
+            <p class="card-description">
+                Giden Mesaj Tablosu
+            </p>
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            @*<th>#</th>*@
+                            <th>Konu</th>
+                            <th>Alıcı</th>
+                            <th>Tarih</th>
+                            <th>İçerik</th>
+                            <th>Detaylar</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in Model)
+                        {
+                            var modalId = $"Modal-{item.WriterMessageID}";
+                            <tr>
+
+                                <td>@item.Subject</td>
+                                <td>@item.Receiver</td>
+                                <td>@(((DateTime)item.Date).ToString("dd.MM.yyyy"))</td>
+                                @if (item.MessageContent.Length > 40)
+                                {
+                                    <td class="text-muted">@item.MessageContent.Substring(0, 40)...</td>
+                                }
+                                else
+                                {
+                                    <td class="text-muted">@item.MessageContent.Substring(0, item.MessageContent.Length)...</td>
+                                }
+                                <td>
+                                    <button type="button" class="btn btn-outline-dribbble btn-sm" data-toggle="modal" data-target="#@modalId">Mesajı Gör</button>
+                                    <div class="modal fade" id="@modalId" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true">
+                                        <div class="modal-dialog" role="document">
+                                            <div class="modal-content">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title" id="exampleModalLabel">@item.Subject</h5>
+                                                </div>
+                                                <div class="modal-body">
+                                                    <p>Gönderen: @item.SenderName</p>
+                                                    <p>Alıcı: @item.ReceiverName</p>
+                                                    <p style="white-space:pre-wrap">@item.MessageContent</p>
+                                                    <p>@(((DateTime)item.Date).ToString("dd.MM.yyyy"))</p>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-danger" data-dismiss="modal">Kapat</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+

@@ -1,0 +1,59 @@
+﻿@using EntityLayer.Concrete
+@model List<Message>
+@{
+    ViewData["Title"] = "Index";
+    Layout = "~/Views/Shared/_NewAdminLayout.cshtml";
+}
+
+<div class="col-lg-12 grid-margin stretch-card">
+    <div class="card">
+        <div class="card-body">
+            <h4 class="card-title">İletişim Kutusu</h4>
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Gönderen</th>
+                            <th>Tarih</th>
+                            <th style="text-align:center">Sil</th>
+                            <th>Mesajı Gör</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in Model)
+                        {
+                            var modalId = $"Modal-{item.MessageID}";
+                            <tr>
+                                <td>@item.Name</td>
+                                <td>@(((DateTime)item.Date).ToString("dd.MM.yyyy"))</td>
+                                <td style="text-align:center"><a class="btn btn-outline-danger" href="/Contact/DeleteContactMessage/@item.MessageID" onclick="return confirm('Silme İşlemini Onaylayın!');">Sil</a></td>
+                                <td>
+                                    <button type="button" class="btn btn-outline-dribbble btn-sm" style="text-align:center" data-toggle="modal" data-target="#@modalId">Görüntüle</button>
+                                    <div class="modal fade" id="@modalId" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true">
+                                        <div class="modal-dialog" role="document">
+                                            <div class="modal-content" style="background-color:lightgray">
+                                                <div class="modal-header" style="text-align:center">
+                                                    <h5 class="modal-title" id="exampleModalLabel">@item.Content</h5>
+                                                </div>
+                                                <div class="modal-body">
+                                                    <p>Adı: @item.Name</p>
+                                                    <p>Mail: @item.Mail</p>
+                                                    <p style="white-space:pre-wrap">@item.Content</p>
+                                                    <p>@(((DateTime)item.Date).ToString("dd.MM.yyyy"))</p>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-danger" data-dismiss="modal">Kapat</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
